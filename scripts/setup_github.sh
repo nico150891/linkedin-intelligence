@@ -29,7 +29,9 @@ gh repo edit "$FULL_REPO" \
 
 gh api "repos/$FULL_REPO/topics" \
   --method PUT \
-  --field names='["python","linkedin","cli","llm","playwright","data-analysis","portfolio","deepseek","ollama","job-market"]'
+  --input - <<'EOF'
+{"names":["python","linkedin","cli","llm","playwright","data-analysis","portfolio","deepseek","ollama","job-market"]}
+EOF
 
 echo "✓ Metadata configured"
 
@@ -39,13 +41,21 @@ echo "→ Configuring branch protection on main..."
 gh api "repos/$FULL_REPO/branches/main/protection" \
   --method PUT \
   --header "Accept: application/vnd.github+json" \
-  --field required_status_checks='{"strict":true,"contexts":["lint","test"]}' \
-  --field enforce_admins=false \
-  --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true,"require_code_owner_reviews":true}' \
-  --field restrictions=null \
-  --field allow_force_pushes=false \
-  --field allow_deletions=false \
-  --field block_creations=false
+  --input - <<'EOF'
+{
+  "required_status_checks": {"strict": true, "contexts": ["lint", "test"]},
+  "enforce_admins": false,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "block_creations": false
+}
+EOF
 
 echo "✓ Branch protection configured"
 echo ""
