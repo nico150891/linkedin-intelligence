@@ -59,6 +59,14 @@ strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
+[tool.coverage.run]
+source = ["linkedin_intelligence"]
+omit = [
+    "linkedin_intelligence/cli.py",
+    "linkedin_intelligence/config.py",
+    "linkedin_intelligence/scrapers/*",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
