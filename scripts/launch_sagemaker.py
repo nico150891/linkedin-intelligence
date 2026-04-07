@@ -41,7 +41,7 @@ BUCKET = f"sagemaker-{REGION}-{ACCOUNT}"
 DLC_ACCOUNT = "763104351884"
 IMAGE_TAG = "2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker"
 IMAGE_URI = f"{DLC_ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/pytorch-training:{IMAGE_TAG}"
-INSTANCE_TYPE = "ml.g4dn.xlarge"
+INSTANCE_TYPE = "ml.m5.2xlarge"
 VOLUME_SIZE_GB = 50
 MAX_RUNTIME_SECONDS = 3600  # 1 hour
 S3_PREFIX = "linkedin-intelligence"
@@ -138,7 +138,6 @@ def _create_processing_job(
                 "bash",
                 "/opt/ml/processing/input/code/scripts/sagemaker_entrypoint.sh",
             ],
-            "ContainerArguments": [],
         },
         Environment={
             "OLLAMA_MODEL": model,
