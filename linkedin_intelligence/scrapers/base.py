@@ -102,9 +102,44 @@ class AsyncScraper:
 
         logger.info("Logging in to LinkedIn...")
         await self._navigate("https://www.linkedin.com/login")
+
+        # Wait for login form — LinkedIn may redirect or show a challenge
+        try:
+            await self.page.wait_for_selector("#username", timeout=15000)
+        except Exception:
+            logger.warning(
+                "Login form not found (page: %s). LinkedIn may require manual verification. "
+                "Run with --headed to resolve.",
+                self.page.url,
+            )
+            raise
+
         await self.page.fill("#username", email)
         await self.page.fill("#password", password)
         await self.page.click('button[type="submit"]')
-        await self.page.wait_for_url("**/feed/**", timeout=30000)
+
+        # LinkedIn may show a CAPTCHA or verification challenge.
+        # If running headed, give the user time to resolve it manually.
+        try:
+            await self.page.wait_for_url("**/feed/**", timeout=15000)
+        except Exception:
+            current = self.page.url
+            if "checkpoint" in current or "challenge" in current:
+                if not self._headless:
+                    logger.info(
+                        "LinkedIn verification detected. "
+                        "Please solve the challenge in the browser. Waiting up to 120s..."
+                    )
+                    await self.page.wait_for_url("**/feed/**", timeout=120000)
+                else:
+                    logger.warning(
+                        "LinkedIn verification detected (current: %s). "
+                        "Run with --headed to solve manually.",
+                        current,
+                    )
+                    raise
+            else:
+                raise
+
         await self._save_session()
         logger.info("Login successful")

@@ -162,6 +162,7 @@ def scrape_jobs(
     location: Annotated[str, typer.Option(help="Job location filter")] = "Spain",
     since: Annotated[str | None, typer.Option(help="Only jobs after YYYY-MM-DD")] = None,
     dry_run: Annotated[bool, typer.Option(help="Simulate without making requests")] = False,
+    headed: Annotated[bool, typer.Option(help="Show browser window (for CAPTCHA solving)")] = False,
 ) -> None:
     """Scrape LinkedIn job listings."""
     settings = get_settings()
@@ -178,7 +179,11 @@ def scrape_jobs(
         from linkedin_intelligence.scrapers.jobs import JobsScraper
 
         session_path = settings.gdpr_export_path.parent / ".session"
-        scraper = AsyncScraper(session_path=session_path, delay=settings.scrape_delay_seconds)
+        scraper = AsyncScraper(
+            session_path=session_path,
+            delay=settings.scrape_delay_seconds,
+            headless=not headed,
+        )
         await scraper.start()
 
         try:

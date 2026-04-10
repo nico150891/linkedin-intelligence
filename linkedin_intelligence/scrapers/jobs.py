@@ -26,16 +26,30 @@ logger = logging.getLogger(__name__)
 
 
 class _Selectors:
-    """All LinkedIn CSS selectors in one place."""
+    """All LinkedIn CSS selectors in one place.
 
-    JOB_CARD = "div.job-search-card"
-    JOB_CARD_TITLE = "h3.base-search-card__title"
-    JOB_CARD_COMPANY = "h4.base-search-card__subtitle a"
-    JOB_CARD_LOCATION = "span.job-search-card__location"
-    JOB_CARD_LINK = "a.base-card__full-link"
-    JOB_CARD_DATE = "time"
+    LinkedIn serves different HTML for public (logged-out) and authenticated
+    (logged-in) views. We try the authenticated selectors first, then fall back
+    to the public ones.
+    """
 
+    # Authenticated (logged-in) view
+    AUTH_JOB_CARD = "li.scaffold-layout__list-item"
+    AUTH_JOB_CARD_TITLE = "a.job-card-container__link strong"
+    AUTH_JOB_CARD_COMPANY = ".artdeco-entity-lockup__subtitle span"
+    AUTH_JOB_CARD_LOCATION = ".artdeco-entity-lockup__caption span"
+    AUTH_JOB_CARD_LINK = 'a[href*="/jobs/view/"]'
+
+    # Public (logged-out) view
+    PUB_JOB_CARD = "div.job-search-card"
+    PUB_JOB_CARD_TITLE = "h3.base-search-card__title"
+    PUB_JOB_CARD_COMPANY = "h4.base-search-card__subtitle a"
+    PUB_JOB_CARD_LOCATION = "span.job-search-card__location"
+    PUB_JOB_CARD_LINK = "a.base-card__full-link"
+
+    # Job detail page (shared between views)
     JOB_DETAIL_DESCRIPTION = "div.description__text"
+    JOB_DETAIL_DESCRIPTION_AUTH = "article.jobs-description__container"
     JOB_DETAIL_CRITERIA = "li.description__job-criteria-item"
 
 
@@ -120,17 +134,33 @@ class JobsScraper:
         tree = HTMLParser(html)
         cards: list[dict[str, str]] = []
 
-        for node in tree.css(_Selectors.JOB_CARD):
-            title_el = node.css_first(_Selectors.JOB_CARD_TITLE)
-            company_el = node.css_first(_Selectors.JOB_CARD_COMPANY)
-            location_el = node.css_first(_Selectors.JOB_CARD_LOCATION)
-            link_el = node.css_first(_Selectors.JOB_CARD_LINK)
+        # Try authenticated selectors first, fall back to public
+        nodes = tree.css(_Selectors.AUTH_JOB_CARD)
+        if nodes:
+            sel_title = _Selectors.AUTH_JOB_CARD_TITLE
+            sel_company = _Selectors.AUTH_JOB_CARD_COMPANY
+            sel_location = _Selectors.AUTH_JOB_CARD_LOCATION
+            sel_link = _Selectors.AUTH_JOB_CARD_LINK
+        else:
+            nodes = tree.css(_Selectors.PUB_JOB_CARD)
+            sel_title = _Selectors.PUB_JOB_CARD_TITLE
+            sel_company = _Selectors.PUB_JOB_CARD_COMPANY
+            sel_location = _Selectors.PUB_JOB_CARD_LOCATION
+            sel_link = _Selectors.PUB_JOB_CARD_LINK
+
+        for node in nodes:
+            title_el = node.css_first(sel_title)
+            company_el = node.css_first(sel_company)
+            location_el = node.css_first(sel_location)
+            link_el = node.css_first(sel_link)
 
             if not title_el or not link_el:
                 continue
 
             raw_href = link_el.attributes.get("href") or ""
             url = raw_href.split("?")[0]
+            if url.startswith("/"):
+                url = "https://www.linkedin.com" + url
             if url in self._seen_urls:
                 continue
 
@@ -149,6 +179,8 @@ class JobsScraper:
         """Extract job description text from detail page HTML."""
         tree = HTMLParser(html)
         desc_el = tree.css_first(_Selectors.JOB_DETAIL_DESCRIPTION)
+        if desc_el is None:
+            desc_el = tree.css_first(_Selectors.JOB_DETAIL_DESCRIPTION_AUTH)
         if desc_el is None:
             return ""
         return desc_el.text(strip=True)
@@ -191,6 +223,12 @@ class JobsScraper:
             cards = self._parse_job_cards(html)
 
             if not cards:
+                logger.debug("No job cards found at start=%d. URL: %s", start, url)
+                # Save HTML for debugging selector issues
+                debug_path = self._output_path / "_debug_search.html"
+                debug_path.parent.mkdir(parents=True, exist_ok=True)
+                debug_path.write_text(html)
+                logger.debug("Saved debug HTML to %s", debug_path)
                 break
 
             for card in cards:
