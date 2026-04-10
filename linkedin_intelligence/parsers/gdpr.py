@@ -73,11 +73,38 @@ def _strip_bom(text: str) -> str:
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
-    """Read a CSV file handling BOM and returning a list of row dicts."""
+    """Read a CSV file handling BOM, preamble lines, and header normalization."""
     raw = path.read_text(encoding="utf-8-sig")
     raw = _strip_bom(raw)
-    reader = csv.DictReader(StringIO(raw))
+
+    # Some LinkedIn exports (e.g. Connections.csv) start with preamble lines
+    # before the actual CSV header. Skip lines until we find a comma-separated header.
+    lines = raw.splitlines(keepends=True)
+    start = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and "," in stripped and not stripped.startswith('"When '):
+            start = i
+            break
+    csv_text = "".join(lines[start:])
+
+    reader = csv.DictReader(StringIO(csv_text))
+    # Normalize headers to Title Case so "FROM" -> "From", "CONTENT" -> "Content", etc.
+    # Preserve multi-word keys like "Application Date" and "First Name".
+    if reader.fieldnames:
+        mapping = {name: name.title() for name in reader.fieldnames}
+        reader.fieldnames = [mapping[name] for name in reader.fieldnames]
+
     return list(reader)
+
+
+def _find_csv(directory: Path, name: str) -> Path:
+    """Find a CSV file by name, case-insensitively."""
+    lower = name.lower()
+    for f in directory.iterdir():
+        if f.name.lower() == lower:
+            return f
+    return directory / name  # fallback — will trigger "not found" later
 
 
 def _parse_date_flexible(value: str) -> datetime:
@@ -89,6 +116,10 @@ def _parse_date_flexible(value: str) -> datetime:
         "%Y-%m-%d",
         "%d %b %Y",  # "15 Jan 2024"
         "%b %Y",  # "Jan 2022"
+        "%m/%d/%y, %I:%M %p",  # "8/25/25, 11:47 PM"
+        "%m/%d/%Y, %I:%M %p",  # "8/25/2025, 11:47 PM"
+        "%m/%d/%y",  # "8/25/25"
+        "%Y-%m-%d %H:%M:%S UTC",  # "2026-04-07 18:51:23 UTC"
     ):
         try:
             return datetime.strptime(value, fmt)  # noqa: DTZ007
@@ -115,7 +146,7 @@ class GDPRParser:
 
     def parse_messages(self) -> list[Message]:
         """Parse messages.csv with deduplication and recruiter detection."""
-        csv_path = self._path / "messages.csv"
+        csv_path = _find_csv(self._path, "messages.csv")
         if not csv_path.exists():
             logger.warning("messages.csv not found at %s", csv_path)
             return []
@@ -163,7 +194,7 @@ class GDPRParser:
 
     def parse_connections(self) -> list[Connection]:
         """Parse connections.csv."""
-        csv_path = self._path / "connections.csv"
+        csv_path = _find_csv(self._path, "connections.csv")
         if not csv_path.exists():
             logger.warning("connections.csv not found at %s", csv_path)
             return []
@@ -203,7 +234,7 @@ class GDPRParser:
 
     def parse_job_applications(self) -> list[JobApplication]:
         """Parse job_applications.csv."""
-        csv_path = self._path / "job_applications.csv"
+        csv_path = _find_csv(self._path, "job_applications.csv")
         if not csv_path.exists():
             logger.warning("job_applications.csv not found at %s", csv_path)
             return []
