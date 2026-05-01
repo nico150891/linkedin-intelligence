@@ -97,6 +97,21 @@ def _show_stats_summary(stats: object) -> None:
         console.print(f"Recruiter messages analyzed: [bold]{stats.inbound_recruiter_count}[/bold]")
 
 
+def _save_stats_json(stats: object, path: Path = Path("output/stats.json")) -> None:
+    """Persist MarketStats as JSON to disk."""
+    import dataclasses
+    import json
+
+    from linkedin_intelligence.providers.base import MarketStats
+
+    if not isinstance(stats, MarketStats):
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dataclasses.asdict(stats), indent=2, ensure_ascii=False))
+    console.print(f"Saved stats to [bold]{path}[/bold]")
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -241,6 +256,7 @@ def analyze() -> None:
         recruiter_signals_path=signals_path if signals_path.exists() else None,
     )
     _show_stats_summary(stats)
+    _save_stats_json(stats)
 
 
 @app.command()
@@ -331,6 +347,7 @@ def run_all(
         enriched_path = settings.processed_path / "jobs_enriched.jsonl"
         stats = compute_stats(enriched_path)
         _show_stats_summary(stats)
+        _save_stats_json(stats)
 
         # Portfolio suggestions
         if profile:
